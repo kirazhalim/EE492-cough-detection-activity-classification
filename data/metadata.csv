@@ -70,3 +70,17 @@ record_id,filename,date,subject,activity,context,clothing,relative_path
 68,068_20260329_halim_standing_noise.csv,2026-03-29,halim,standing,noise,overclothes,curated_csv/068_20260329_halim_standing_noise.csv
 69,069_20260329_halim_standing_noise.csv,2026-03-29,halim,standing,noise,overclothes,curated_csv/069_20260329_halim_standing_noise.csv
 70,070_20260329_halim_standing_falsepositive.csv,2026-03-29,halim,standing,falsepositive,overclothes,curated_csv/070_20260329_halim_standing_falsepositive.csv
+71,071_20260402_halim_running_clean.csv,2026-04-02,halim,running,clean,underclothes,curated_csv/071_20260402_halim_running_clean.csv
+72,072_20260402_halim_standing_clean.csv,2026-04-02,halim,standing,clean,underclothes,curated_csv/072_20260402_halim_standing_clean.csv
+73,073_20260402_berk_walking_clean.csv,2026-04-02,berk,walking,clean,underclothes,curated_csv/073_20260402_berk_walking_clean.csv
+74,074_20260402_berk_standing_coughnoise.csv,2026-04-02,berk,standing,coughnoise,underclothes,curated_csv/074_20260402_berk_standing_coughnoise.csv
+75,075_20260402_berk_standing_noise.csv,2026-04-02,berk,standing,noise,underclothes,curated_csv/075_20260402_berk_standing_noise.csv
+76,076_20260402_ali_sitting_noise.csv,2026-04-02,ali,sitting,noise,underclothes,curated_csv/076_20260402_ali_sitting_noise.csv
+77,077_20260402_ali_standing_clean.csv,2026-04-02,ali,standing,clean,underclothes,curated_csv/077_20260402_ali_standing_clean.csv
+78,078_20260402_halim_walking_clean.csv,2026-04-02,halim,walking,clean,underclothes,curated_csv/078_20260402_halim_walking_clean.csv
+79,079_20260402_halim_running_clean.csv,2026-04-02,halim,running,clean,underclothes,curated_csv/079_20260402_halim_running_clean.csv
+80,080_20260402_halim_sitting_clean.csv,2026-04-02,halim,sitting,clean,underclothes,curated_csv/080_20260402_halim_sitting_clean.csv
+81,081_20260402_halim_sitting_noise.csv,2026-04-02,halim,sitting,noise,underclothes,curated_csv/081_20260402_halim_sitting_noise.csv
+82,082_20260402_halim_standing_coughnoise.csv,2026-04-02,halim,standing,coughnoise,underclothes,curated_csv/082_20260402_halim_standing_coughnoise.csv
+83,083_20260402_halim_running_clean.csv,2026-04-02,halim,running,clean,underclothes,curated_csv/083_20260402_halim_running_clean.csv
+84,084_20260402_halim_running_clean.csv,2026-04-02,halim,running,clean,underclothes,curated_csv/084_20260402_halim_running_clean.csv

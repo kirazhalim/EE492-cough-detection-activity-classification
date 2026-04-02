@@ -1,0 +1,233 @@
+# Phase 2: Activity Classification (multi-class)
+# Exclude `walking` because the dataset has only a couple of files for it.
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# Record -> activity mapping from metadata
+activity_by_record = df_meta.set_index("record_id")["activity"].to_dict()
+
+def _ensure_record_splits():
+    # train_recs/val_recs/test_recs are created in the V2 split cell, but keep this robust.
+    global train_recs, val_recs, test_recs
+    if ("train_recs" not in globals()) or ("val_recs" not in globals()) or ("test_recs" not in globals()):
+        train_recs, val_recs, test_recs = split_records(df_meta)
+
+
+def filter_records_excluding_activity(record_ids, exclude_activity={"walking"}):
+    return [rid for rid in record_ids if activity_by_record.get(rid) not in exclude_activity]
+
+_ensure_record_splits()
+
+train_recs_p2 = filter_records_excluding_activity(list(train_recs), exclude_activity={"walking"})
+val_recs_p2 = filter_records_excluding_activity(list(val_recs), exclude_activity={"walking"})
+test_recs_p2 = filter_records_excluding_activity(list(test_recs), exclude_activity={"walking"})
+
+activity_classes = sorted(
+    set(activity_by_record[rid] for rid in (train_recs_p2 + val_recs_p2 + test_recs_p2))
+)
+activity_to_idx = {a: i for i, a in enumerate(activity_classes)}
+num_classes_v2 = len(activity_classes)
+
+print("\n--- Phase 2 Activity Classification ---")
+print(f"Classes (excluding walking): {activity_classes}")
+print(f"Record counts -> Train: {len(train_recs_p2)} | Val: {len(val_recs_p2)} | Test: {len(test_recs_p2)}")
+
+
+def build_v2_activity_dataset(record_ids, metadata_df, window_length_sec=1.0, hop_length_sec=0.25):
+    """Builds window-level samples where each window inherits the record's activity label."""
+    all_audio, all_motion, all_labels = [], [], []
+
+    for rec_id in record_ids:
+        act = activity_by_record.get(rec_id)
+        if act is None or act not in activity_to_idx:
+            continue
+
+        prep_record = load_record_preprocessed(rec_id, metadata_df, DATA_ROOT)
+        win_results = build_centered_windows_for_record(
+            prep_record, window_length_sec=window_length_sec, hop_length_sec=hop_length_sec
+        )
+        n_w = len(win_results["labels"])
+        if n_w == 0:
+            continue
+
+        y_act = np.full((n_w,), activity_to_idx[act], dtype=np.int64)
+        all_audio.append(win_results["audio_windows"])
+        all_motion.append(win_results["motion_windows"])
+        all_labels.append(y_act)
+
+    if len(all_audio) == 0:
+        raise RuntimeError("Phase 2 dataset is empty after excluding activities.")
+
+    return (
+        np.vstack(all_audio),
+        np.vstack(all_motion),
+        np.concatenate(all_labels),
+    )
+
+
+X_a_train_p2, X_m_train_p2, y_train_p2 = build_v2_activity_dataset(train_recs_p2, df_meta)
+X_a_val_p2, X_m_val_p2, y_val_p2 = build_v2_activity_dataset(val_recs_p2, df_meta)
+X_a_test_p2, X_m_test_p2, y_test_p2 = build_v2_activity_dataset(test_recs_p2, df_meta)
+
+print(f"Train set: {X_a_train_p2.shape} | Labels: {y_train_p2.shape}")
+print(f"Val set:   {X_a_val_p2.shape} | Labels: {y_val_p2.shape}")
+print(f"Test set:  {X_a_test_p2.shape} | Labels: {y_test_p2.shape}")
+print("Train class counts:", np.bincount(y_train_p2, minlength=num_classes_v2))
+
+
+class ActivityMultimodalDataset(Dataset):
+    def __init__(self, X_audio, X_motion, labels):
+        self.audio = torch.tensor(X_audio, dtype=torch.float32)
+        self.motion = torch.tensor(X_motion, dtype=torch.float32)
+        self.labels = torch.tensor(labels, dtype=torch.long)  # CE expects long
+
+    def __len__(self):
+        return len(self.labels)
+
+    def __getitem__(self, idx):
+        return {"audio": self.audio[idx], "motion": self.motion[idx], "label": self.labels[idx]}
+
+
+BATCH_SIZE_P2 = 32
+train_loader_p2 = DataLoader(ActivityMultimodalDataset(X_a_train_p2, X_m_train_p2, y_train_p2),
+                              batch_size=BATCH_SIZE_P2, shuffle=True)
+val_loader_p2 = DataLoader(ActivityMultimodalDataset(X_a_val_p2, X_m_val_p2, y_val_p2),
+                            batch_size=BATCH_SIZE_P2, shuffle=False)
+test_loader_p2 = DataLoader(ActivityMultimodalDataset(X_a_test_p2, X_m_test_p2, y_test_p2),
+                             batch_size=BATCH_SIZE_P2, shuffle=False)
+
+
+class DualBranchActivityCNN(nn.Module):
+    def __init__(self, num_classes):
+        super().__init__()
+        self.audio_branch = nn.Sequential(
+            nn.Conv1d(2, 16, kernel_size=15, stride=2, padding=7), nn.BatchNorm1d(16), nn.ReLU(), nn.MaxPool1d(4),
+            nn.Conv1d(16, 32, kernel_size=9, stride=2, padding=4), nn.BatchNorm1d(32), nn.ReLU(), nn.MaxPool1d(4),
+            nn.Conv1d(32, 64, kernel_size=5, stride=1, padding=2), nn.BatchNorm1d(64), nn.ReLU(),
+            nn.AdaptiveAvgPool1d(1)
+        )
+        self.motion_branch = nn.Sequential(
+            nn.Conv1d(2, 16, kernel_size=5, stride=1, padding=2), nn.BatchNorm1d(16), nn.ReLU(), nn.MaxPool1d(2),
+            nn.Conv1d(16, 32, kernel_size=3, stride=1, padding=1), nn.BatchNorm1d(32), nn.ReLU(),
+            nn.AdaptiveAvgPool1d(1)
+        )
+        self.classifier = nn.Sequential(
+            nn.Linear(96, 64), nn.ReLU(), nn.Dropout(0.4),
+            nn.Linear(64, num_classes)
+        )
+
+    def forward(self, audio, motion):
+        x_a = self.audio_branch(audio).squeeze(-1)
+        x_m = self.motion_branch(motion).squeeze(-1)
+        return self.classifier(torch.cat((x_a, x_m), dim=1))
+
+
+model_p2_v2 = DualBranchActivityCNN(num_classes=num_classes_v2).to(device)
+
+# Class-weighted cross-entropy for imbalance
+class_counts = np.bincount(y_train_p2, minlength=num_classes_v2).astype(np.float32)
+class_weights = class_counts.sum() / (class_counts + 1e-6)
+criterion_p2 = nn.CrossEntropyLoss(
+    weight=torch.tensor(class_weights, dtype=torch.float32, device=device)
+)
+
+optimizer_p2 = optim.AdamW(model_p2_v2.parameters(), lr=1e-3, weight_decay=1e-4)
+scheduler_p2 = optim.lr_scheduler.ReduceLROnPlateau(optimizer_p2, mode="min", factor=0.5, patience=3)
+
+
+def train_activity_model(model, train_loader, val_loader, num_epochs=20):
+    for epoch in range(num_epochs):
+        # Train
+        model.train()
+        running_train_loss = 0.0
+        n_train = 0
+        correct_train = 0
+
+        for batch in train_loader:
+            audio = batch["audio"].to(device)
+            motion = batch["motion"].to(device)
+            labels = batch["label"].to(device)  # [B]
+
+            # Augmentation is label-invariant at record-level for activity.
+            audio_aug, motion_aug = augment_multimodal_batch(
+                audio, motion,
+                shift_max_sec=0.15,
+                noise_level_audio=0.02,
+                noise_level_motion=0.01
+            )
+
+            optimizer_p2.zero_grad()
+            logits = model(audio_aug, motion_aug)  # [B, C]
+            loss = criterion_p2(logits, labels)
+            loss.backward()
+            optimizer_p2.step()
+
+            bs = audio.size(0)
+            running_train_loss += loss.item() * bs
+            n_train += bs
+            correct_train += (logits.argmax(dim=1) == labels).sum().item()
+
+        epoch_train_loss = running_train_loss / max(n_train, 1)
+        epoch_train_acc = correct_train / max(n_train, 1)
+
+        # Validate
+        model.eval()
+        running_val_loss = 0.0
+        n_val = 0
+        correct_val = 0
+
+        with torch.no_grad():
+            for batch in val_loader:
+                audio = batch["audio"].to(device)
+                motion = batch["motion"].to(device)
+                labels = batch["label"].to(device)
+
+                logits = model(audio, motion)
+                loss = criterion_p2(logits, labels)
+
+                bs = audio.size(0)
+                running_val_loss += loss.item() * bs
+                n_val += bs
+                correct_val += (logits.argmax(dim=1) == labels).sum().item()
+
+        epoch_val_loss = running_val_loss / max(n_val, 1)
+        epoch_val_acc = correct_val / max(n_val, 1)
+
+        scheduler_p2.step(epoch_val_loss)
+
+        print(
+            f"Phase2 Epoch {epoch+1:02d}/{num_epochs} | LR {optimizer_p2.param_groups[0]['lr']:.6f} | "
+            f"TrainLoss {epoch_train_loss:.4f} Acc {epoch_train_acc*100:.2f}% | "
+            f"ValLoss {epoch_val_loss:.4f} Acc {epoch_val_acc*100:.2f}%"
+        )
+
+
+train_activity_model(model_p2_v2, train_loader_p2, val_loader_p2, num_epochs=20)
+
+
+# Test evaluation
+from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
+
+model_p2_v2.eval()
+all_preds, all_labels = [], []
+with torch.no_grad():
+    for batch in test_loader_p2:
+        audio = batch["audio"].to(device)
+        motion = batch["motion"].to(device)
+        labels = batch["label"].to(device)
+
+        logits = model_p2_v2(audio, motion)
+        preds = logits.argmax(dim=1)
+
+        all_preds.extend(preds.cpu().numpy().tolist())
+        all_labels.extend(labels.cpu().numpy().tolist())
+
+print("\n--- Phase 2 Test Results ---")
+print(classification_report(all_labels, all_preds, target_names=activity_classes))
+
+cm = confusion_matrix(all_labels, all_preds)
+disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=activity_classes)
+fig, ax = plt.subplots(figsize=(7, 7))
+disp.plot(ax=ax, cmap="Blues", colorbar=False)
+plt.title("Phase 2 Activity Confusion Matrix")
+plt.show()
