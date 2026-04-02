@@ -1,0 +1,10 @@
+data/curated_csv/
+data/newlytakendata_csv/
+data/raw_csv/
+data/bozukk/
+*.mat
+__pycache__/
+.venv/
+.DS_Store
+**/*.pyc
+models/
