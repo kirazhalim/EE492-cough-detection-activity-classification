@@ -38,8 +38,3 @@ The dataset covers various activities and noise conditions. The distribution is 
 * **Activities Recorded:** Sitting up, Walking, Running, Standing up.
 * **Noise Conditions:** Clean, Cough noise, Music noise, Sneeze noise, Snooze noise, Door noise.
 
-**Summary Counts:**
-* **Sitting up:** 40 Total Files (18 Clean, 14 Cough noise, 4 Music noise, 2 Sneeze noise, 1 Snooze noise, 1 Door noise).
-* **Walking:** 20 Total Files (5 Clean, 13 Cough noise, 2 Music noise).
-* **Running:** 1 Total File (Music noise only).
-* **Standing up:** 3 Total Files (Clean only).
