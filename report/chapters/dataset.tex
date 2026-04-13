@@ -1,0 +1,71 @@
+\chapter{DATASET AND SYSTEM}
+
+\section{System Overview}
+
+This project uses a wearable multi-sensor system designed for cough detection and activity classification. The system records synchronized audio and motion signals, allowing both acoustic and body-coupled information to be analyzed together. The overall processing pipeline includes signal acquisition, preprocessing, windowing, and deep learning-based classification.
+
+Figure~\ref{fig:preprocessed_signals} shows an example of the preprocessed sensor signals and the corresponding cough labels for a 20-second recording. Cough events appear as high-energy bursts in the pulmonary microphone and are accompanied by characteristic patterns in the stretch sensor and accelerometer channels. The gray-shaded regions indicate the ground truth cough intervals.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{preprocessed_signals.png}
+\caption{Example preprocessed sensor signals and cough labels.}
+\label{fig:preprocessed_signals}
+\end{figure}
+
+\section{Sensor Configuration}
+
+Each recording contains four synchronized sensor channels sampled at 4800\,Hz. The channels are listed in Table~\ref{tab:sensors}.
+
+\begin{table}[H]
+\centering
+\caption{Sensor channel configuration.}
+\label{tab:sensors}
+\begin{tabular}{@{}clp{7cm}@{}}
+\toprule
+\textbf{Col} & \textbf{Sensor} & \textbf{Description} \\
+\midrule
+1 & Pulmonary microphone & Captures internal chest sounds related to coughing \\
+2 & Ambient microphone & Records environmental audio \\
+3 & Stretch sensor (+\,label) & Measures chest wall expansion; also encodes cough label \\
+4 & Accelerometer (Z-axis) & Captures vertical body motion \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Dataset Composition}
+
+The dataset was expanded during this phase to include 85 recordings, up from 60 in the previous phase. Each recording has a fixed duration of approximately 20 seconds. The majority of the recordings (64) come from one primary subject, while the remaining 21 recordings were collected from three additional subjects to begin evaluating cross-subject variability. The recordings cover multiple activity types (sitting, walking, standing, running) and various noise conditions (clean, cough noise, music, sneeze). The activity and noise distributions are summarized in Table~\ref{tab:dataset_dist}.
+
+\begin{table}[H]
+\centering
+\caption{Dataset distribution across activities and noise conditions (85 total recordings).}
+\label{tab:dataset_dist}
+\begin{tabular}{@{}lcccc|c@{}}
+\toprule
+\textbf{Activity} & \textbf{Clean} & \textbf{CoughNoise} & \textbf{OtherNoise} & \textbf{FalsePositive} & \textbf{Total} \\
+\midrule
+Sitting    & 19 & 14 & 10 & 0 & 43 \\
+Walking    & 7  & 13 & 2  & 0 & 22 \\
+Running    & 4  & 0  & 1  & 0 & 5  \\
+Standing   & 7  & 2  & 4  & 2 & 15 \\
+\midrule
+\textbf{Total} & \textbf{37} & \textbf{29} & \textbf{17} & \textbf{2} & \textbf{85} \\
+\bottomrule
+\end{tabular}
+\\[4pt]
+\footnotesize\textit{Note: OtherNoise includes music, sneeze, snooze, door, and generic noise conditions. FalsePositive recordings contain non-cough sounds used to test false alarm robustness.}
+\end{table}
+
+Given the small number of running and standing recordings, the deep learning experiments handle these classes carefully. In V1, only sitting and walking are used for activity classification. In V2, all four classes are included but results are interpreted with the class imbalance in mind. In V3, the running class is excluded because having only 5 running records makes reliable stratified splitting across train, validation, and test sets impractical.
+
+It should be noted that the overall dataset size of 85 short recordings is a significant limitation for deep learning, which generally benefits from large amounts of training data. The small dataset restricts the model capacity that can be used without overfitting and limits the reliability of performance estimates. In particular, the class imbalance across activities and the limited number of subjects prevent the models from learning generalizable cross-subject patterns. Expanding the dataset with more subjects, longer sessions, and a more balanced activity distribution is a clear priority for future work.
+
+\section{Ground Truth Encoding}
+
+The cough ground truth is embedded within the stretch sensor channel using bitwise encoding. The least significant bit of the raw value represents the cough label, while the remaining bits represent the sensor magnitude:
+\begin{align}
+y[n] &= x[n] \;\&\; 1 \label{eq:label} \\
+s[n] &= x[n] \gg 1 \label{eq:stretch}
+\end{align}
+where $y[n] = 1$ indicates a cough event and $s[n]$ is the decoded stretch sensor value. This encoding allows both signal and annotation to be stored in a single channel.

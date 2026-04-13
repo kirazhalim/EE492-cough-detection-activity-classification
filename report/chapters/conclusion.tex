@@ -1,0 +1,37 @@
+\chapter{CONCLUSION}
+
+\section{Summary}
+
+In this work, three deep learning model versions were developed for cough detection and activity classification using wearable multi-sensor data. The models follow a dual-branch CNN architecture that processes audio and motion signals separately and combines them through late fusion.
+
+The first version (V1) established a baseline using raw 1D waveform inputs. The second version (V2) improved training through center-focused window labeling, data augmentation, and learning rate scheduling. The third version (V3) replaced the raw audio input with log-Mel spectrograms processed by a 2D CNN, which achieved the best overall performance.
+
+For cough detection, V3 achieved 0.93 overall accuracy with 0.95 cough recall and 0.74 cough precision on the test set. Compared to V1, cough recall improved from 0.71 to 0.95 across the three versions. For activity classification, V3 reached 0.92 accuracy and 0.91 macro F1-score on a 3-class problem (sitting, standing, walking) using class weighting.
+
+These results show that deep learning models can effectively detect coughs from multi-sensor wearable data without relying on handcrafted features.
+
+\section{Future Work}
+
+Several directions are identified for future work:
+
+\begin{itemize}[nosep]
+    \item \textbf{Event-level evaluation:} Applying the IoU-based event-level evaluation from EE491 to the deep learning models would allow a more direct comparison with classical ML methods.
+    \item \textbf{More data:} The current dataset of 85 short recordings from a limited number of subjects is small for deep learning. This restricts model capacity, reduces the reliability of performance estimates, and prevents evaluation of cross-subject generalization. Expanding the dataset with more subjects, longer recording sessions, and a more balanced distribution of activities and noise conditions is the most important next step.
+    \item \textbf{Threshold tuning:} The current decision threshold is fixed at 0.5. Tuning this threshold based on the precision--recall trade-off could improve practical performance.
+    \item \textbf{Model refinement:} Exploring architectures such as recurrent neural networks or attention mechanisms, and applying more systematic hyperparameter tuning, could improve results.
+    \item \textbf{Real-time operation:} The current system is designed for offline analysis. Adapting the pipeline for real-time or near-real-time use would require causal filtering and efficient inference.
+\end{itemize}
+
+\section{Realistic Constraints}
+
+\subsection{Social, Environmental and Economic Impact}
+
+The primary social value of this project is its potential for health monitoring. A reliable cough detection system may support long-term respiratory monitoring and provide useful information for clinicians. However, the current system is a prototype and is not intended for clinical diagnosis. The project uses low-power wearable sensors and software-based analysis, so its environmental impact is minimal.
+
+\subsection{Cost Analysis}
+
+The primary cost is labor. Assuming approximately 10 hours per week during the semester at an hourly rate of \$15, the labor cost for two semesters is estimated at \$4800. Since the sensing hardware and data acquisition system are already available in the laboratory, no additional hardware costs are incurred.
+
+\subsection{Standards}
+
+If extended toward clinical use, the system should comply with relevant medical device standards such as ISO/IEEE 11073 for communication and interoperability, and IEEE 12207 for software life cycle management. Compliance with Turkish and European Union medical device regulations (MDR) would also be required.

@@ -1,0 +1,138 @@
+\documentclass[12pt, a4paper, openany]{report}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{setspace}
+\usepackage{amsmath, amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{bookmark}
+\usepackage{geometry}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{tikz}
+\usetikzlibrary{positioning, arrows.meta, shapes.geometric, fit, calc}
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage[numbers]{natbib}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{titlesec}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=black,
+  urlcolor=black
+}
+
+\onehalfspacing
+
+\geometry{
+  a4paper,
+  margin=1in
+}
+
+\titlespacing*{\chapter}{0pt}{-20pt}{15pt}
+
+\graphicspath{{figures/}}
+
+\begin{document}
+
+\pagenumbering{roman}
+
+% ---- Title Page ----
+\begin{titlepage}
+\centering
+\vspace*{1.5cm}
+{\Large \textbf{EE491-EE492\\Senior Design Project Midterm Report}}\\[2cm]
+{\LARGE \textbf{Multi-Sensor Cough Analysis and State\\[0.3cm]
+Classification with Machine Learning}}\\[3cm]
+{\large \textbf{Submitted by:}\hspace{0.5em}Abdulhalim Kiraz}\\[1.5cm]
+{\large \textbf{Principal Investigator:}\hspace{0.5em}Prof.\ Dr.\ Yasemin Kahya}\\[3cm]
+\vfill
+{\large 06.04.2026}
+\end{titlepage}
+
+% ---- Acknowledgments ----
+\chapter*{ACKNOWLEDGMENTS}
+\addcontentsline{toc}{chapter}{ACKNOWLEDGMENTS}
+\begin{itemize}
+\item I would like to express my sincere gratitude to Prof.\ Dr.\ Yasemin Kahya for her guidance, valuable feedback, and continuous support throughout this project.
+\item I also thank Onur Yusuf \c{C}{\i}nar for providing the dataset used in this study and for his assistance during the data preparation process.
+\end{itemize}
+
+% ---- Abstract ----
+\chapter*{ABSTRACT}
+\addcontentsline{toc}{chapter}{ABSTRACT}
+This report presents deep learning models for cough detection and activity classification using wearable multi-sensor data. The system uses four synchronized sensor channels: a pulmonary microphone, an ambient microphone, a stretch sensor, and an accelerometer. Three model versions were developed and compared. The first version (V1) uses a dual-branch 1D convolutional neural network that processes raw audio and motion signals separately and combines them through late fusion. The second version (V2) introduces center-focused window labeling, data augmentation, and learning rate scheduling while keeping the same architecture. The third version (V3) replaces the raw audio input with log-Mel spectrograms processed by a 2D CNN, while the motion branch stays unchanged. V3 achieved the best cough detection performance with 0.93 overall accuracy and 0.95 cough recall on the test set. Activity classification reached up to 0.92 accuracy with class weighting strategies. These results show that deep learning can detect coughs from multi-sensor wearable data without manual feature engineering.
+
+% ---- Table of Contents ----
+\tableofcontents
+
+% ---- Chapters ----
+\pagenumbering{arabic}
+\input{chapters/introduction}
+\input{chapters/related_work}
+\input{chapters/dataset}
+\input{chapters/methodology}
+\input{chapters/results}
+\input{chapters/conclusion}
+
+% ---- Bibliography ----
+
+\begin{thebibliography}{}
+
+\bibitem{dixon2025}
+Dixon, P. C., Dubeau, S., Roy, J.-F., \& Fournier, P.-A. (2025).
+Automatic cough detection via a multi-sensor smart garment using machine learning.
+\textit{Computers in Biology and Medicine}, \textit{191}, 110192.
+
+\bibitem{elfaramawy2017}
+T.~Elfaramawy, C.~Latyr~Fall, M.~Morissette, F.~Lellouche, and B.~Gosselin,
+``Wireless respiratory monitoring and coughing detection using a wearable patch sensor network,''
+in \textit{Proc. 15th IEEE Int. New Circuits and Systems Conf. (NEWCAS)},
+Strasbourg, France, 2017, pp.~197--200, doi:~10.1109/NEWCAS.2017.8010139.
+
+\bibitem{bales2020}
+Bales, C., Nabeel, M., John, C. N., Masood, U., Qureshi, H. N., Farooq, H., Posokhova, I., \& Imran, A. (2020).
+Can machine learning be used to recognize and diagnose coughs?
+In \textit{Proceedings of the International Conference on e-Health and Bioengineering (EHB)} (pp. 1--4).
+IEEE.
+https://doi.org/10.1109/EHB50910.2020.9280115
+
+\bibitem{amoh2016}
+Amoh, J., \& Odame, K. (2016).
+Deep neural networks for identifying cough sounds.
+\textit{IEEE Transactions on Biomedical Circuits and Systems}, \textit{10}(5), 1003--1011.
+https://doi.org/10.1109/TBCAS.2016.2598794
+
+\bibitem{otoshi2021}
+T.~Otoshi, T.~Nagano, S.~Izumi, D.~Hazama, \textit{et~al.}, ``A novel automatic cough frequency monitoring system combining a triaxial accelerometer and a stretchable strain sensor,'' \textit{Sci. Rep.}, vol.~11, Art.~no.~9973, 2021.
+https://doi.org/10.1038/s41598-021-89457-0
+
+\bibitem{shi2018}
+Y.~Shi, H.~Liu, Y.~Wang, M.~Cai, and W.~Xu, ``Theory and application of audio-based assessment of cough,'' \textit{J. Sensors}, vol.~2018, Art.~no.~9845321, 2018.
+https://doi.org/10.1155/2018/9845321
+
+\bibitem{sanchezmorillo2024}
+D.~Sanchez Morillo, D.~Sales Lerida, B.~Priego Torres, and A.~Le\'on Jim\'enez, ``Cough detection using acceleration signals and deep learning techniques,'' \textit{Electronics}, vol.~13, no.~12, Art.~no.~2410, 2024.
+https://doi.org/10.3390/electronics13122410
+
+\bibitem{kingma2015adam}
+D.~P.~Kingma and J.~Ba, ``Adam: A method for stochastic optimization,'' in \textit{Proc. 3rd Int. Conf. Learning Representations (ICLR)}, San Diego, CA, USA, 2015.
+https://arxiv.org/abs/1412.6980
+
+\bibitem{loshchilov2019adamw}
+I.~Loshchilov and F.~Hutter, ``Decoupled weight decay regularization,'' in \textit{Proc. 7th Int. Conf. Learning Representations (ICLR)}, New Orleans, LA, USA, 2019.
+https://arxiv.org/abs/1711.05101
+
+\bibitem{goodfellow2016deep}
+I.~Goodfellow, Y.~Bengio, and A.~Courville, \textit{Deep Learning}.\hspace{0.5em}Cambridge, MA: MIT Press, 2016.
+https://www.deeplearningbook.org/
+
+\end{thebibliography}
+
+\end{document}

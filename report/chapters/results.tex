@@ -1,0 +1,131 @@
+\chapter{IMPLEMENTATION AND RESULTS}
+
+This chapter presents the experimental results for both cough detection and activity classification across all three model versions. All metrics are computed on held-out test sets that contain no recordings from the training or validation sets.
+
+\section{Cough Detection Results}
+
+\subsection{Performance Comparison}
+
+Table~\ref{tab:cough_results} compares the cough detection test results across V1, V2, and V3.
+
+\begin{table}[H]
+\centering
+\caption{Test set cough detection performance across model versions.}
+\label{tab:cough_results}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Metric} & \textbf{V1} & \textbf{V2} & \textbf{V3} \\
+\midrule
+Test windows & 429 & 1001 & 1001 \\
+Cough windows (\%) & 129 (30.1\%) & 192 (19.2\%) & 192 (19.2\%) \\
+\midrule
+Overall accuracy & 0.89 & 0.91 & 0.93 \\
+\midrule
+Non-cough precision & 0.89 & 0.98 & 0.99 \\
+Non-cough recall & 0.96 & 0.91 & 0.92 \\
+Non-cough F1 & 0.92 & 0.94 & 0.95 \\
+\midrule
+Cough precision & 0.89 & 0.71 & 0.74 \\
+Cough recall & 0.71 & 0.92 & 0.95 \\
+Cough F1 & 0.79 & 0.80 & 0.83 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Important note on comparability:} V1 uses a different labeling strategy (full-window) and hop size (0.5\,s) than V2/V3 (center-20\% labeling, 0.25\,s hop). V1 also uses fewer records (71 vs.\ 85). As a result, the V1 test set has different characteristics, and direct numerical comparison with V2/V3 should be interpreted carefully.
+
+\subsection{Confusion Matrix Analysis}
+
+Figure~\ref{fig:cough_cm} shows the confusion matrices for the cough detection test sets.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{cough_confusion_matrices.pdf}
+\caption{Cough detection confusion matrices for V1 (left), V2 (center), and V3 (right).}
+\label{fig:cough_cm}
+\end{figure}
+
+\subsection{Discussion}
+
+The results show a clear progression from V1 to V3:
+
+\begin{itemize}[nosep]
+    \item \textbf{V1 to V2:} Cough recall improves from 0.71 to 0.92. This is likely due to the combination of center labeling (which gives cleaner ground truth), data augmentation (which improves generalization), and learning rate scheduling. However, cough precision drops from 0.89 to 0.71, meaning more false alarms occur.
+    \item \textbf{V2 to V3:} Cough recall further improves from 0.92 to 0.95, and cough precision increases slightly from 0.71 to 0.74. The log-Mel spectrogram representation allows the 2D CNN to capture frequency patterns that distinguish coughs from other sounds.
+\end{itemize}
+
+Across all versions, the models successfully avoid predicting only the majority class. This confirms that the class weighting (\texttt{pos\_weight}) in the loss function is effective.
+
+\section{Activity Classification Results}
+
+Table~\ref{tab:activity_results} summarizes the activity classification results.
+
+\begin{table}[H]
+\centering
+\caption{Activity classification test results across model versions.}
+\label{tab:activity_results}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{} & \textbf{V1} & \textbf{V2} & \textbf{V3 (Run-B)} \\
+\midrule
+Number of classes & 2 & 4 & 3 \\
+Windows used & Cough-only & All & All \\
+Test accuracy & 0.96 & 0.66 & 0.92 \\
+Macro F1 & -- & -- & 0.91 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{V1:} Activity classification used only 2 classes (sitting and walking) and only windows from cough segments. The test set contained 100 sitting and only 4 walking test windows, so the high accuracy of 0.96 is not reliable due to the extreme class imbalance in the test data.
+
+\textbf{V2:} All 4 activity classes were used with all windows. The overall accuracy of 0.66 reflects the difficulty of the 4-class problem, especially with imbalanced class distributions. The test set had no running samples at all, which made the running class metrics meaningless.
+
+\textbf{V3:} Multiple training runs (A--D) were compared by varying class weighting and weighted sampling strategies. A walking recall guardrail was applied: any run whose walking recall drops more than 0.05 compared to the baseline (Run-A) is penalized. Among the runs that pass, the one with the highest standing recall and macro F1 is selected.
+
+\begin{itemize}[nosep]
+    \item Run-A (baseline): No class weighting or sampling. Overall accuracy 0.84, walking recall 0.77.
+    \item Run-B (class weights): Class weights in the loss function. Overall accuracy 0.92, walking recall 0.81, macro F1 0.91.
+    \item Run-C (weighted sampler): Weighted random sampling during training. Overall accuracy 0.87, walking recall 0.78.
+    \item Run-D (weights + sampler): Both class weights and weighted random sampling. Overall accuracy 0.88, walking recall 0.85.
+\end{itemize}
+
+All four runs passed the walking recall guardrail. Run-B was selected as the best configuration because it achieved the highest standing recall (0.86) and macro F1 (0.91) among all passing runs.
+
+\section{Comparison with Classical ML}
+
+Table~\ref{tab:ml_comparison} provides a brief comparison between the deep learning results and the classical ML results from EE491.
+
+\begin{table}[H]
+\centering
+\caption{Comparison of DL (this work) and classical ML (EE491) cough detection.}
+\label{tab:ml_comparison}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Aspect} & \textbf{Classical ML (EE491)} & \textbf{DL -- V3 (this work)} \\
+\midrule
+Features & Handcrafted (8 features) & Learned (CNN) \\
+Audio input & Time/freq statistics & Log-Mel spectrogram \\
+Window size & 200\,ms & 1000\,ms \\
+Validation & GroupKFold (5 folds) & Single split (70/15/15) \\
+Best window F1 (cough) & 0.83 (RF) & 0.83 (V3) \\
+Event-level F1 & 0.92 (XGBoost) & Not yet evaluated \\
+\midrule
+Activity accuracy & 0.89 (2-class) & 0.92 (3-class, V3 Run-B) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The window-level cough F1 scores are similar between the best classical ML model and V3. However, the DL approach does not require manual feature engineering and works with a larger window size. Event-level evaluation, which was a key metric in EE491, has not yet been applied to the DL models. This is an important direction for future work.
+
+The activity classification comparison is also not straightforward, as EE491 used 2 classes while V3 uses 3 classes (running excluded). The higher accuracy of V3 on a harder problem is encouraging.
+
+\section{Qualitative Analysis}
+
+Figure~\ref{fig:prediction_timeline} shows a time-aligned visualization of V3 predictions on a test recording. The model produces high cough probabilities during actual cough events and low probabilities during non-cough regions.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{prediction_timeline.png}
+\caption{V3 prediction timeline on a test recording. Top: preprocessed audio signal. Middle: ground-truth cough labels. Bottom: predicted cough probability over time.}
+\label{fig:prediction_timeline}
+\end{figure}
