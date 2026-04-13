@@ -1,0 +1,7 @@
+\chapter{RELATED WORK}
+
+Deep learning approaches for cough detection have been explored in recent years. Amoh and Odame~\cite{amoh2016} proposed using deep neural networks to identify cough sounds from audio recordings. Their work showed that neural networks can learn discriminative features from audio without manual feature engineering. Sanchez Morillo et al.~\cite{sanchezmorillo2024} used acceleration signals combined with deep learning for cough detection, showing that motion sensors can complement audio-based methods.
+
+Multi-sensor systems for respiratory monitoring have also been studied. Elfaramawy et al.~\cite{elfaramawy2017} developed a wireless wearable patch sensor network for respiratory monitoring and cough detection. Otoshi et al.~\cite{otoshi2021} combined a triaxial accelerometer with a stretchable strain sensor for automatic cough frequency monitoring and showed that using multiple sensing modalities improves detection reliability.
+
+Most existing deep learning systems for cough detection use either audio-only or motion-only inputs. This work combines both modalities using a dual-branch CNN architecture with late fusion, which allows the model to learn separate representations for acoustic and mechanical signals before combining them for classification.
