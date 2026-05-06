@@ -19,6 +19,9 @@ experiments/mlruns/
 mlruns/
 mlflow.db
 
+# Personal notes, ideas, and scratch planning
+kendime_notlar/
+
 # Generated artifacts
 artifacts/*
 !artifacts/.gitkeep

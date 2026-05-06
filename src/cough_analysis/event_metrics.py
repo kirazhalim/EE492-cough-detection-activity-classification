@@ -19,6 +19,7 @@ def binary_labels_to_events(
     labels: np.ndarray,
     sample_rate: int,
     min_duration_sec: float = 0.0,
+    merge_gap_sec: float = 0.0,
 ) -> list[Event]:
     labels = np.asarray(labels).astype(bool)
     events = []
@@ -28,17 +29,45 @@ def binary_labels_to_events(
         if active and start_idx is None:
             start_idx = idx
         elif not active and start_idx is not None:
-            event = Event(start_idx / sample_rate, idx / sample_rate)
-            if event.duration >= min_duration_sec:
-                events.append(event)
+            events.append(Event(start_idx / sample_rate, idx / sample_rate))
             start_idx = None
 
     if start_idx is not None:
         event = Event(start_idx / sample_rate, len(labels) / sample_rate)
-        if event.duration >= min_duration_sec:
-            events.append(event)
+        events.append(event)
 
-    return events
+    return post_process_events(
+        events,
+        min_duration_sec=min_duration_sec,
+        merge_gap_sec=merge_gap_sec,
+    )
+
+
+def post_process_events(
+    events: list[Event],
+    min_duration_sec: float = 0.0,
+    merge_gap_sec: float = 0.0,
+) -> list[Event]:
+    if not events:
+        return []
+
+    sorted_events = sorted(events, key=lambda event: (event.start, event.end))
+    merged = []
+    current = sorted_events[0]
+
+    for event in sorted_events[1:]:
+        if event.start <= current.end + merge_gap_sec:
+            current = Event(current.start, max(current.end, event.end))
+        else:
+            merged.append(current)
+            current = event
+    merged.append(current)
+
+    return [
+        event
+        for event in merged
+        if event.duration >= min_duration_sec
+    ]
 
 
 def window_predictions_to_events(
@@ -46,11 +75,18 @@ def window_predictions_to_events(
     predictions: np.ndarray,
     min_duration_sec: float = 0.0,
     merge_gap_sec: float = 0.0,
+    span_mode: str = "full",
+    center_fraction: float = 0.2,
 ) -> list[Event]:
     predictions = np.asarray(predictions).astype(bool)
+    decision_spans = prediction_decision_spans(
+        spans,
+        span_mode=span_mode,
+        center_fraction=center_fraction,
+    )
     active_spans = [
         (float(start), float(end))
-        for (start, end), active in zip(spans, predictions)
+        for (start, end), active in zip(decision_spans, predictions)
         if active
     ]
     if not active_spans:
@@ -62,15 +98,45 @@ def window_predictions_to_events(
         if start <= current_end + merge_gap_sec:
             current_end = max(current_end, end)
         else:
-            event = Event(current_start, current_end)
-            if event.duration >= min_duration_sec:
-                events.append(event)
+            events.append(Event(current_start, current_end))
             current_start, current_end = start, end
 
-    event = Event(current_start, current_end)
-    if event.duration >= min_duration_sec:
-        events.append(event)
-    return events
+    events.append(Event(current_start, current_end))
+    return post_process_events(events, min_duration_sec=min_duration_sec)
+
+
+def prediction_decision_spans(
+    spans: list[tuple[float, float]],
+    span_mode: str = "full",
+    center_fraction: float = 0.2,
+) -> list[tuple[float, float]]:
+    if span_mode not in {"full", "center", "hop"}:
+        raise ValueError(f"Unknown span_mode: {span_mode}")
+    if not spans:
+        return []
+
+    clean_spans = [(float(start), float(end)) for start, end in spans]
+    if span_mode == "full":
+        return clean_spans
+
+    centers = np.asarray([(start + end) / 2 for start, end in clean_spans], dtype=np.float32)
+    if span_mode == "center":
+        widths = [
+            max(0.0, (end - start) * center_fraction)
+            for start, end in clean_spans
+        ]
+    else:
+        if len(centers) > 1:
+            width = float(np.median(np.diff(centers)))
+        else:
+            start, end = clean_spans[0]
+            width = end - start
+        widths = [max(0.0, width) for _ in clean_spans]
+
+    return [
+        (max(0.0, float(center) - width / 2), float(center) + width / 2)
+        for center, width in zip(centers, widths)
+    ]
 
 
 def event_iou(a: Event, b: Event) -> float:
@@ -137,4 +203,3 @@ def event_level_metrics(
         "mean_matched_iou": mean_iou,
         "iou_threshold": iou_threshold,
     }
-

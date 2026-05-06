@@ -46,6 +46,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--threshold", type=float, default=0.5)
     parser.add_argument("--event-iou-threshold", type=float, default=0.2)
     parser.add_argument("--event-merge-gap-sec", type=float, default=0.0)
+    parser.add_argument("--gt-min-duration-sec", type=float, default=0.0)
+    parser.add_argument("--gt-merge-gap-sec", type=float, default=0.0)
+    parser.add_argument("--pred-min-duration-sec", type=float, default=0.0)
+    parser.add_argument("--pred-merge-gap-sec", type=float, default=None)
+    parser.add_argument(
+        "--pred-span-mode",
+        choices=["full", "center", "hop"],
+        default="full",
+    )
+    parser.add_argument("--pred-center-fraction", type=float, default=None)
     parser.add_argument("--device", default="auto")
     parser.add_argument("--output-dir", default="artifacts/evaluations/v3")
     parser.add_argument("--mlflow", action="store_true")
@@ -116,6 +126,14 @@ def predict_arrays(
     return np.asarray(all_labels), np.asarray(all_preds), np.asarray(all_probs)
 
 
+def effective_pred_merge_gap(args: argparse.Namespace) -> float:
+    return (
+        args.event_merge_gap_sec
+        if args.pred_merge_gap_sec is None
+        else args.pred_merge_gap_sec
+    )
+
+
 def log_to_mlflow(
     args: argparse.Namespace,
     cfg: dict,
@@ -149,6 +167,16 @@ def log_to_mlflow(
                 "threshold": args.threshold,
                 "event_iou_threshold": args.event_iou_threshold,
                 "event_merge_gap_sec": args.event_merge_gap_sec,
+                "gt_min_duration_sec": args.gt_min_duration_sec,
+                "gt_merge_gap_sec": args.gt_merge_gap_sec,
+                "pred_min_duration_sec": args.pred_min_duration_sec,
+                "pred_merge_gap_sec": effective_pred_merge_gap(args),
+                "pred_span_mode": args.pred_span_mode,
+                "pred_center_fraction": (
+                    float(cfg["windowing"]["center_fraction"])
+                    if args.pred_center_fraction is None
+                    else args.pred_center_fraction
+                ),
                 "batch_size": batch_size,
                 "device": str(device),
                 "record_count": len(record_ids),
@@ -185,6 +213,7 @@ def log_to_mlflow(
 def main() -> int:
     args = parse_args()
     device = resolve_device(args.device)
+    pred_merge_gap_sec = effective_pred_merge_gap(args)
     checkpoint = load_checkpoint(args.checkpoint, device=device)
     cfg = checkpoint.get("config") or load_config(args.config)
 
@@ -197,6 +226,11 @@ def main() -> int:
         record_ids = val_ids if args.split == "val" else test_ids
 
     window_cfg = cfg["windowing"]
+    pred_center_fraction = (
+        float(window_cfg["center_fraction"])
+        if args.pred_center_fraction is None
+        else args.pred_center_fraction
+    )
     spec_cfg = cfg["spectrogram"]
     X_spec, X_motion, labels = build_dataset(
         record_ids,
@@ -282,11 +316,16 @@ def main() -> int:
         gt_events = binary_labels_to_events(
             record_data["record"]["cough_label"],
             sample_rate=int(record_data["record"]["fs_audio"]),
+            min_duration_sec=args.gt_min_duration_sec,
+            merge_gap_sec=args.gt_merge_gap_sec,
         )
         pred_events = window_predictions_to_events(
             record_data["spans"],
             record_preds,
-            merge_gap_sec=args.event_merge_gap_sec,
+            min_duration_sec=args.pred_min_duration_sec,
+            merge_gap_sec=pred_merge_gap_sec,
+            span_mode=args.pred_span_mode,
+            center_fraction=pred_center_fraction,
         )
         record_metrics = event_level_metrics(
             gt_events,
@@ -318,7 +357,12 @@ def main() -> int:
         "recall": event_recall,
         "f1": event_f1,
         "iou_threshold": args.event_iou_threshold,
-        "merge_gap_sec": args.event_merge_gap_sec,
+        "gt_min_duration_sec": args.gt_min_duration_sec,
+        "gt_merge_gap_sec": args.gt_merge_gap_sec,
+        "pred_min_duration_sec": args.pred_min_duration_sec,
+        "pred_merge_gap_sec": pred_merge_gap_sec,
+        "pred_span_mode": args.pred_span_mode,
+        "pred_center_fraction": pred_center_fraction,
         "per_record": per_record_events,
     }
     events_path.write_text(json.dumps(event_summary, indent=2), encoding="utf-8")
