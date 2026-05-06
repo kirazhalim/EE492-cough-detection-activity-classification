@@ -1,12 +1,13 @@
 from pathlib import Path
-import pandas as pd
+import argparse
 import shutil
 import re
 
 # =========================
 # USER SETTINGS
 # =========================
-RAW_ROOT = Path(r"C:\Users\kiraz\OneDrive\Desktop\BOUN\Semester8(2025-2026)\EE492\data\raw_csv")
+DATA_ROOT = Path(__file__).resolve().parent
+RAW_ROOT = DATA_ROOT / "raw_csv"
 CURATED_ROOT = RAW_ROOT.parent / "curated_csv"
 METADATA_PATH = RAW_ROOT.parent / "metadata.csv"
 
@@ -99,17 +100,57 @@ def build_new_filename(global_record_id: int, parsed: dict):
     rid = f"{global_record_id:03d}"
     return f"{rid}_{parsed['date_raw']}_{SUBJECT}_{parsed['activity']}_{parsed['context']}.csv"
 
-def main():
-    if not RAW_ROOT.exists():
-        raise FileNotFoundError(f"Folder not found: {RAW_ROOT}")
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--raw-root", type=Path, default=RAW_ROOT)
+    parser.add_argument("--curated-root", type=Path, default=None)
+    parser.add_argument("--metadata-path", type=Path, default=None)
+    parser.add_argument("--subject", default=SUBJECT)
+    parser.add_argument("--default-context", default=DEFAULT_CONTEXT)
+    parser.add_argument("--default-clothing", default=DEFAULT_CLOTHING)
+    parser.add_argument("--overwrite", action="store_true")
+    return parser.parse_args()
 
-    CURATED_ROOT.mkdir(parents=True, exist_ok=True)
+def main(args=None):
+    global SUBJECT, DEFAULT_CONTEXT, DEFAULT_CLOTHING
+
+    args = parse_args() if args is None else args
+
+    raw_root = Path(args.raw_root).expanduser().resolve()
+    curated_root = (
+        raw_root.parent / "curated_csv"
+        if args.curated_root is None
+        else Path(args.curated_root).expanduser().resolve()
+    )
+    metadata_path = (
+        raw_root.parent / "metadata.csv"
+        if args.metadata_path is None
+        else Path(args.metadata_path).expanduser().resolve()
+    )
+
+    SUBJECT = args.subject
+    DEFAULT_CONTEXT = args.default_context
+    DEFAULT_CLOTHING = args.default_clothing
+
+    if not raw_root.exists():
+        raise FileNotFoundError(f"Folder not found: {raw_root}")
+
+    curated_root.mkdir(parents=True, exist_ok=True)
+
+    existing_curated = list(curated_root.glob("*.csv"))
+    if not args.overwrite and (existing_curated or metadata_path.exists()):
+        raise RuntimeError(
+            "Refusing to overwrite existing curated data or metadata. "
+            "Pass --overwrite to rebuild them."
+        )
+
+    import pandas as pd
 
     discovered = []
     errors = []
 
     # 1. Parse all files
-    for csv_file in RAW_ROOT.rglob("*.csv"):
+    for csv_file in raw_root.rglob("*.csv"):
         try:
             parsed = parse_old_filename(csv_file.name)
             discovered.append({
@@ -129,13 +170,13 @@ def main():
     metadata_rows = []
 
     # 3. Clear curated folder
-    for f in CURATED_ROOT.glob("*.csv"):
+    for f in curated_root.glob("*.csv"):
         f.unlink()
 
     # 4. Copy files and build metadata
     for global_id, item in enumerate(discovered):
         new_filename = build_new_filename(global_id, item)
-        dst = CURATED_ROOT / new_filename
+        dst = curated_root / new_filename
         shutil.copy2(item["source_path"], dst)
 
         metadata_rows.append({
@@ -146,19 +187,19 @@ def main():
             "activity": item["activity"],
             "context": item["context"],
             "clothing": item["clothing"],
-            "relative_path": str(dst.relative_to(RAW_ROOT.parent)).replace("\\", "/"),
+            "relative_path": str(dst.relative_to(raw_root.parent)).replace("\\", "/"),
         })
 
     # 5. Save metadata
     df = pd.DataFrame(metadata_rows)
-    df.to_csv(METADATA_PATH, index=False)
+    df.to_csv(metadata_path, index=False)
 
     print(f"Curated files created: {len(df)}")
-    print(f"Metadata saved to: {METADATA_PATH}")
+    print(f"Metadata saved to: {metadata_path}")
 
     # 6. Save errors
     if errors:
-        err_path = RAW_ROOT.parent / "prepare_dataset_errors.csv"
+        err_path = raw_root.parent / "prepare_dataset_errors.csv"
         pd.DataFrame(errors).to_csv(err_path, index=False)
         print(f"Errors saved to: {err_path}")
 

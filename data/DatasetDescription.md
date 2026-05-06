@@ -6,7 +6,11 @@ The dataset consists of multi-channel physiological recordings designed for coug
 ## 2. File Specifications
 * **Format:** Comma-Separated Values (CSV).
 * **Structure:** Headerless (data begins immediately on Row 1).
+<<<<<<< HEAD
+* **Naming Convention:** Files follow a `NNN_YYYYMMDD_Subject_Activity_Context.csv` format (e.g., `000_20250602_kivanc_standing_clean.csv`).
+=======
 * **Naming Convention:** Files follow a `YYYYMMDD_ID_Activity_Condition.csv` format (e.g., `20250602_001_standup_overClothes.csv`).
+>>>>>>> origin/main
 
 ## 3. Channel Mapping
 The dataset contains four columns corresponding to raw sensor inputs:
@@ -35,6 +39,11 @@ The 3rd Column (Stretch Sensor) uses bitwise encoding to store the sensor value 
 ## 6. Dataset Distribution Statistics
 The dataset covers various activities and noise conditions. The distribution is as follows:
 
+<<<<<<< HEAD
+* **Activities Recorded:** Sitting, Walking, Running, Standing.
+* **Noise Conditions / Contexts:** Clean, Cough noise, Music noise, Sneeze noise, Snooze noise, Door noise, Generic noise, False-positive.
+=======
 * **Activities Recorded:** Sitting up, Walking, Running, Standing up.
 * **Noise Conditions:** Clean, Cough noise, Music noise, Sneeze noise, Snooze noise, Door noise.
+>>>>>>> origin/main
 

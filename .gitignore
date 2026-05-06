@@ -5,6 +5,32 @@ data/bozukk/
 *.mat
 __pycache__/
 .venv/
+.cache/
 .DS_Store
 **/*.pyc
+*.egg-info/
 models/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Local experiment tracking
+experiments/mlruns/
+mlruns/
+mlflow.db
+
+# Generated artifacts
+artifacts/*
+!artifacts/.gitkeep
+
+# DVC local cache
+.dvc/cache/
+.dvc/tmp/
+
+# LaTeX build outputs
+report/*.aux
+report/*.blg
+report/*.log
+report/*.out
+report/*.toc
+texput.log
