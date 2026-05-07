@@ -81,6 +81,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("csv_paths", nargs="*", type=Path, help="Raw CSV file(s).")
     parser.add_argument(
+        "--select",
+        action="store_true",
+        help="Choose raw CSV file(s) with a file explorer dialog.",
+    )
+    parser.add_argument(
         "--raw-dir",
         type=Path,
         help="Process every CSV under this directory, recursively.",
@@ -147,6 +152,33 @@ def default_date_from_name(path: Path) -> str:
     if match:
         return match.group(1)
     return datetime.now().strftime("%Y%m%d")
+
+
+def choose_csv_files() -> list[Path]:
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+    except Exception as exc:
+        print(f"Could not import tkinter for file selection: {exc}")
+        return []
+
+    downloads = Path.home() / "Downloads"
+    initial_dir = downloads if downloads.exists() else Path.home()
+
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    try:
+        selected = filedialog.askopenfilenames(
+            parent=root,
+            title="Select raw CSV file(s)",
+            initialdir=str(initial_dir),
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+        )
+    finally:
+        root.destroy()
+
+    return [Path(path).expanduser().resolve() for path in selected]
 
 
 def load_metadata(metadata_path: Path) -> pd.DataFrame:
@@ -356,6 +388,8 @@ def discover_inputs(args: argparse.Namespace) -> list[Path]:
     paths = [path.expanduser().resolve() for path in args.csv_paths]
     if args.raw_dir:
         paths.extend(sorted(args.raw_dir.expanduser().resolve().rglob("*.csv")))
+    if args.select or (not paths and not args.raw_dir):
+        paths.extend(choose_csv_files())
 
     unique_paths = []
     seen = set()
