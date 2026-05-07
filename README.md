@@ -1,55 +1,106 @@
-# Multi-Sensor Cough Analysis and State Classification
+# Multi-Sensor Cough Analysis and Activity Classification
 
-This repository contains the EE491-EE492 senior design project on cough detection and activity classification using synchronized wearable sensor recordings.
+This repository is my EE491-EE492 senior design project. I worked on cough detection and activity classification with wearable sensor recordings. The main idea is to use audio and motion signals together, instead of using only one sensor.
 
-## Project Layout
+The project uses 85 short recordings, around 28.33 minutes in total. Each recording has 4 synchronized channels sampled at 4800 Hz:
+
+- Pulmonary microphone
+- Ambient microphone
+- Stretch sensor
+- Accelerometer Z-axis
+
+The stretch sensor channel also stores the cough label in its last bit. I decode it with bitwise operations before training.
+
+## What I Did
+
+- Prepared a reusable Python pipeline under `src/cough_analysis/`.
+- Organized the dataset with `data/metadata.csv`.
+- Used record-level train, validation, and test splits so the same recording does not appear in different splits.
+- Built three deep learning versions for cough detection.
+- Added event-level evaluation, not only window-level evaluation.
+- Tested activity classification with sitting, standing, and walking classes.
+- Kept scripts and configs so the main experiments can be repeated.
+
+## Dataset Summary
+
+The V3 cough detection setup uses a 70/15/15 record-level split:
+
+| Split | Records | Duration (min) | Windows | Cough windows | Cough events |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Train | 59 | 19.67 | 4543 | 788 | 157 |
+| Validation | 13 | 4.33 | 1001 | 226 | 43 |
+| Test | 13 | 4.33 | 1001 | 192 | 37 |
+| All | 85 | 28.33 | 6545 | 1206 | 237 |
+
+Activity distribution in the metadata:
+
+| Activity | Records |
+| --- | ---: |
+| Sitting | 43 |
+| Walking | 22 |
+| Standing | 15 |
+| Running | 5 |
+
+Running has only 5 records, so I did not use it in the final V3 activity classification setup.
+
+## Method
+
+I first preprocess the four channels:
+
+- Audio channels: 60-2200 Hz bandpass filter
+- Stretch sensor: 20 Hz low-pass filter
+- Accelerometer: 20 Hz low-pass filter
+- Window size: 1.0 second
+- V2 and V3 hop size: 0.25 second
+
+For cough detection, I tested three versions:
+
+| Version | Main change |
+| --- | --- |
+| V1 | Raw waveform input with a 1D CNN |
+| V2 | Center-based labels, data augmentation, and learning rate scheduling |
+| V3 | Log-Mel spectrogram input with a 2D CNN audio branch |
+
+The model has two branches. One branch uses the two audio channels, and the other branch uses stretch and accelerometer signals. Then the two outputs are joined before the final classifier.
+
+## Main Results
+
+The best cough detection model is V3. On the test split, it reached:
+
+| Metric | Value |
+| --- | ---: |
+| Test windows | 1001 |
+| Window accuracy | 0.941 |
+| Cough precision | 0.806 |
+| Cough recall | 0.911 |
+| Cough F1 | 0.856 |
+| Event precision | 0.917 |
+| Event recall | 0.892 |
+| Event F1 | 0.904 |
+
+At event level, V3 detected 33 out of 37 cough events and produced 3 false positive events.
+
+For activity classification, the best V3 setup used 3 classes: sitting, standing, and walking. It reached 0.92 accuracy and 0.91 macro F1 on the test set.
+
+More detailed results are in `docs/V3BaselineResults.md` and `report/main.pdf`.
+
+## Repository Structure
 
 ```text
-data/           Dataset metadata, raw CSV folders, and curated CSV records
-docs/           Previous reports and design notes
-experiments/    Existing exploratory and baseline notebooks
-models/         Local model checkpoints
-report/         LaTeX report sources and report figures
-src/            Reusable Python package for new development
-scripts/        Command-line entry points for reproducible workflows
-configs/        Versioned experiment and path configuration files
-tests/          Lightweight checks for reusable code
-artifacts/      Local generated outputs not meant to be edited by hand
+data/           Metadata and dataset preparation files
+docs/           Reports and result notes
+experiments/    Earlier notebooks
+report/         LaTeX report and figures
+src/            Reusable Python package
+scripts/        Training, evaluation, and dataset scripts
+configs/        Experiment configuration files
+tests/          Lightweight tests
+artifacts/      Local generated outputs
 ```
 
-The existing notebooks in `experiments/` are kept in place for compatibility. New reusable code should go under `src/cough_analysis/`, and new repeatable commands should go under `scripts/`.
+## Setup
 
-The first reusable modules are:
-
-```text
-src/cough_analysis/data.py           Metadata loading and raw record decoding
-src/cough_analysis/windowing.py      Window indexing and label rules
-src/cough_analysis/preprocessing.py  Current Butterworth filtering pipeline
-src/cough_analysis/paths.py          Project-relative path helpers
-src/cough_analysis/config.py         YAML config loading
-```
-
-## Current Dataset
-
-The curated dataset is described by `data/metadata.csv`. Each recording contains four synchronized channels sampled at 4800 Hz:
-
-1. Pulmonary microphone
-2. Ambient microphone
-3. Stretch sensor with embedded cough label
-4. Accelerometer Z-axis
-
-The third channel is decoded with bitwise operations:
-
-```python
-cough_label = raw_col3 & 1
-stretch_signal = raw_col3 >> 1
-```
-
-The current V3 baseline results are documented in `docs/V3BaselineResults.md`.
-
-## Environment
-
-Create a Python environment and install the project dependencies:
+Create a Python environment:
 
 ```bash
 python3.12 -m venv .venv
@@ -59,58 +110,20 @@ python -m pip install -r requirements.txt
 python -m pip install -r requirements-dev.txt
 ```
 
-For PyTorch, the exact installation command may depend on the machine and accelerator support. If the generic install fails, install `torch` and `torchaudio` using the command recommended for the target system, then rerun the remaining requirements.
+The project targets Python 3.11 or 3.12.
 
-The project targets Python 3.11 or 3.12. Python 3.14 is not recommended for this project because some scientific and ML packages may lag behind newer interpreter releases.
+## Useful Commands
 
-The currently verified package versions are recorded in `requirements-lock.txt`. To recreate the same package set more strictly:
-
-```bash
-python -m pip install -r requirements-lock.txt
-python -m pip install -e .[dev]
-```
-
-If using conda or mamba:
-
-```bash
-conda env create -f environment.yml
-conda activate ee492-cough
-```
-
-## Reproducibility Direction
-
-The project will use three layers:
-
-- Git for source code, reports, small metadata files, and configuration.
-- DVC for large data files, processed datasets, and model checkpoints.
-- MLflow for experiment parameters, metrics, and run artifacts.
-
-The current repository is prepared so these tools can be introduced without changing the existing notebooks first.
-
-## Common Commands
-
-Compile Python files:
-
-```bash
-make compile
-```
-
-Check the local environment and dataset paths:
-
-```bash
-make env-check
-```
-
-Run lightweight tests:
+Run tests:
 
 ```bash
 make test
 ```
 
-Run a quick V3 model dry-run:
+Check the environment and dataset paths:
 
 ```bash
-PYTHONPATH=src python scripts/train_v3.py --dry-run
+make env-check
 ```
 
 Train the V3 cough detector:
@@ -119,40 +132,18 @@ Train the V3 cough detector:
 PYTHONPATH=src python scripts/train_v3.py --config configs/v3.yaml --output artifacts/models/v3_cough.pt
 ```
 
-Log a V3 training run with MLflow:
+Evaluate a V3 checkpoint:
 
 ```bash
-make train-v3-mlflow PYTHON=.venv/bin/python TRAIN_ARGS="--config configs/v3.yaml --output artifacts/models/v3_cough.pt"
+PYTHONPATH=src python scripts/evaluate_v3.py --checkpoint artifacts/models/v3_cough.pt --split test --threshold 0.6
 ```
 
-Evaluate a saved V3 checkpoint:
-
-```bash
-PYTHONPATH=src python scripts/evaluate_v3.py --checkpoint artifacts/models/v3_cough.pt --split test
-```
-
-Log a V3 evaluation run with MLflow:
-
-```bash
-make eval-v3-mlflow PYTHON=.venv/bin/python EVAL_ARGS="--split test"
-```
-
-Start the local MLflow UI:
-
-```bash
-make mlflow-ui PYTHON=.venv/bin/python
-```
-
-Generate report confusion matrix figures:
+Generate the report figures:
 
 ```bash
 python report/generate_figures.py
 ```
 
-Rebuild curated data from raw CSV files:
+## Notes
 
-```bash
-python scripts/prepare_dataset.py --raw-root data/raw_csv --overwrite
-```
-
-The `--overwrite` flag is required because rebuilding curated data replaces existing curated CSV files and `data/metadata.csv`.
+This project is a prototype for analysis and research. It is not a medical diagnosis tool. The dataset is also small for deep learning, so more subjects and longer recordings would be needed for a stronger real-world evaluation.
