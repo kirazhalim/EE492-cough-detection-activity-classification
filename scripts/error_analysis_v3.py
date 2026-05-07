@@ -58,6 +58,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pred-center-fraction", type=float, default=None)
     parser.add_argument("--batch-size", type=int, default=None)
     parser.add_argument("--device", default="auto")
+    parser.add_argument(
+        "--record-ids",
+        nargs="+",
+        type=int,
+        default=None,
+        help="Analyze specific record ids instead of the configured split.",
+    )
     parser.add_argument("--plot-records", choices=["problem", "all", "none"], default="problem")
     parser.add_argument("--output-dir", default="artifacts/error_analysis/v3")
     return parser.parse_args()
@@ -437,7 +444,9 @@ def main() -> int:
 
     metadata = load_metadata(project_or_absolute(cfg["data"]["metadata"]))
     split_map = checkpoint.get("record_split")
-    if split_map and args.split in split_map:
+    if args.record_ids is not None:
+        record_ids = [int(x) for x in args.record_ids]
+    elif split_map and args.split in split_map:
         record_ids = [int(x) for x in split_map[args.split]]
     else:
         _, val_ids, test_ids = split_records(metadata)
