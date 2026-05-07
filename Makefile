@@ -11,7 +11,7 @@ TRAIN_ARGS ?=
 check: compile env-check
 
 compile:
-	$(PYTHON) -m py_compile data/prepate_dataset.py data/save_raw_data.py experiments/data_utils.py report/generate_figures.py scripts/prepare_dataset.py scripts/check_environment.py scripts/train_v3.py scripts/evaluate_v3.py scripts/predict_record.py scripts/dataset_summary.py scripts/error_analysis_v3.py scripts/sweep_event_boundaries_v3.py src/cough_analysis/*.py tests/*.py
+	$(PYTHON) -m py_compile data/prepate_dataset.py data/save_raw_data.py experiments/data_utils.py report/generate_figures.py scripts/prepare_dataset.py scripts/process_raw_data.py scripts/check_environment.py scripts/train_v3.py scripts/evaluate_v3.py scripts/predict_record.py scripts/dataset_summary.py scripts/error_analysis_v3.py scripts/sweep_event_boundaries_v3.py src/cough_analysis/*.py tests/*.py
 
 env-check:
 	PYTHONPATH=src $(PYTHON) scripts/check_environment.py
