@@ -4,6 +4,8 @@ import argparse
 import os
 import re
 import shutil
+import subprocess
+import sys
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -154,16 +156,13 @@ def default_date_from_name(path: Path) -> str:
     return datetime.now().strftime("%Y%m%d")
 
 
-def choose_csv_files() -> list[Path]:
+def choose_csv_files_tk(initial_dir: Path) -> list[Path] | None:
     try:
         import tkinter as tk
         from tkinter import filedialog
     except Exception as exc:
         print(f"Could not import tkinter for file selection: {exc}")
-        return []
-
-    downloads = Path.home() / "Downloads"
-    initial_dir = downloads if downloads.exists() else Path.home()
+        return None
 
     root = tk.Tk()
     root.withdraw()
@@ -179,6 +178,56 @@ def choose_csv_files() -> list[Path]:
         root.destroy()
 
     return [Path(path).expanduser().resolve() for path in selected]
+
+
+def choose_csv_files_macos(initial_dir: Path) -> list[Path]:
+    escaped_dir = str(initial_dir).replace('"', '\\"')
+    script = f'''
+set defaultFolder to POSIX file "{escaped_dir}"
+set chosenFiles to choose file with prompt "Select raw CSV file(s)" of type {{"csv"}} default location defaultFolder with multiple selections allowed
+set selectedPaths to ""
+repeat with selectedFile in chosenFiles
+    set selectedPaths to selectedPaths & POSIX path of selectedFile & linefeed
+end repeat
+return selectedPaths
+'''
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+    except Exception as exc:
+        print(f"Could not open macOS file selection dialog: {exc}")
+        return []
+
+    if result.returncode != 0:
+        message = (result.stderr or "").strip()
+        if message:
+            print(f"File selection cancelled or failed: {message}")
+        return []
+
+    return [
+        Path(line.strip()).expanduser().resolve()
+        for line in result.stdout.splitlines()
+        if line.strip()
+    ]
+
+
+def choose_csv_files() -> list[Path]:
+    downloads = Path.home() / "Downloads"
+    initial_dir = downloads if downloads.exists() else Path.home()
+
+    selected = choose_csv_files_tk(initial_dir)
+    if selected is not None:
+        return selected
+
+    if sys.platform == "darwin":
+        print("Trying macOS Finder file selection instead.")
+        return choose_csv_files_macos(initial_dir)
+
+    return []
 
 
 def load_metadata(metadata_path: Path) -> pd.DataFrame:

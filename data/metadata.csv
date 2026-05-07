@@ -84,3 +84,6 @@ record_id,filename,date,subject,activity,context,clothing,relative_path
 82,082_20260402_halim_standing_coughnoise.csv,2026-04-02,halim,standing,coughnoise,underclothes,curated_csv/082_20260402_halim_standing_coughnoise.csv
 83,083_20260402_halim_running_clean.csv,2026-04-02,halim,running,clean,underclothes,curated_csv/083_20260402_halim_running_clean.csv
 84,084_20260402_halim_running_clean.csv,2026-04-02,halim,running,clean,underclothes,curated_csv/084_20260402_halim_running_clean.csv
+85,085_20260507_yakup_sitting_noise.csv,2026-05-07,yakup,sitting,noise,underclothes,curated_csv/085_20260507_yakup_sitting_noise.csv
+86,086_20260507_yakup_sitting_noise.csv,2026-05-07,yakup,sitting,noise,underclothes,curated_csv/086_20260507_yakup_sitting_noise.csv
+87,087_20260507_yakup_standing_noise.csv,2026-05-07,yakup,standing,noise,underclothes,curated_csv/087_20260507_yakup_standing_noise.csv
