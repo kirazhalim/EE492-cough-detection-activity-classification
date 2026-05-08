@@ -1,3 +1,6 @@
 * text=auto eol=lf
 *.py text eol=lf
 *.ipynb linguist-vendored
+report/**/*.tex linguist-vendored
+report/**/*.bib linguist-vendored
+report/**/*.bbl linguist-vendored

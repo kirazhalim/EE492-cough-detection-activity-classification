@@ -37,3 +37,8 @@ report/*.log
 report/*.out
 report/*.toc
 texput.log
+
+# Keep only final report PDF tracked
+report/**
+!report/
+!report/main.pdf
