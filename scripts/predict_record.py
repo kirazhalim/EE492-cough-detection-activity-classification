@@ -103,47 +103,130 @@ def preprocess_external_record(record_path: Path) -> dict:
     }
 
 
+def robust_scaled(values: np.ndarray, center: bool = True) -> np.ndarray:
+    values = np.asarray(values, dtype=np.float32)
+    if center:
+        values = values - float(np.median(values))
+    scale = float(np.percentile(np.abs(values), 99))
+    if scale <= 1.0e-12:
+        scale = float(np.max(np.abs(values))) or 1.0
+    return np.clip(values / scale, -1.0, 1.0)
+
+
+def add_gt_backgrounds(ax, gt_events) -> None:
+    for event in gt_events:
+        ax.axvspan(event.start, event.end, color="tab:red", alpha=0.10, linewidth=0)
+
+
+def plot_event_bars(ax, events, color: str, label: str, alpha: float = 0.8) -> None:
+    for event in events:
+        ax.broken_barh(
+            [(event.start, event.duration)],
+            (0.2, 0.6),
+            facecolors=color,
+            alpha=alpha,
+            edgecolors=color,
+            linewidth=1.4,
+        )
+    ax.set_ylim(0, 1)
+    ax.set_yticks([0.5])
+    ax.set_yticklabels([label])
+    ax.set_ylabel(label)
+
+
 def save_timeline(
     record: dict,
     spans: list[tuple[float, float]],
     probs: np.ndarray,
-    pred_events,
     gt_events,
+    threshold: float,
     output_path: Path,
 ) -> None:
-    time = np.arange(len(record["pulm_bp"])) / record["fs_audio"]
-    audio = record["pulm_bp"]
-    denom = np.max(np.abs(audio)) or 1.0
-    audio_norm = audio / denom
-    centers = np.asarray([(s + e) / 2 for s, e in spans])
+    fs_audio = int(record["fs_audio"])
+    fs_motion = int(record["fs_motion"])
+    audio_time = np.arange(len(record["pulm_bp"])) / fs_audio
+    motion_time = np.arange(len(record["stretch_lp"])) / fs_motion
+    centers = np.asarray([(start + end) / 2 for start, end in spans], dtype=np.float32)
+    preds = (probs >= threshold).astype(float)
 
-    fig, axes = plt.subplots(3, 1, figsize=(12, 7), sharex=True)
-    axes[0].plot(time, audio_norm, color="gray", linewidth=0.5)
-    axes[0].set_ylabel("Audio")
-    axes[0].set_title(f"Record prediction: {record['filename']}")
-
-    axes[1].fill_between(
-        time,
-        0,
-        record["cough_label"].astype(float),
-        color="silver",
-        step="pre",
+    fig, axes = plt.subplots(
+        6,
+        1,
+        figsize=(18, 10),
+        sharex=True,
+        gridspec_kw={
+            "height_ratios": [1.2, 1.2, 1.0, 1.0, 0.65, 1.25],
+        },
     )
-    for event in gt_events:
-        axes[1].axvspan(event.start, event.end, color="red", alpha=0.25)
-    axes[1].set_ylabel("GT")
-    axes[1].set_ylim(-0.05, 1.1)
 
-    axes[2].plot(centers, probs, color="tab:blue", marker="o", markersize=2, linewidth=1)
-    for event in pred_events:
-        axes[2].axvspan(event.start, event.end, color="tab:orange", alpha=0.25)
-    axes[2].axhline(0.5, color="black", linestyle="--", linewidth=0.8)
-    axes[2].set_ylabel("P(cough)")
-    axes[2].set_xlabel("Time (s)")
-    axes[2].set_ylim(-0.05, 1.05)
+    title = f"Record prediction | {record['filename']}"
+    if record.get("record_id", 0) != 0:
+        title = f"Record {record['record_id']} | {record['filename']}"
+    if record.get("activity") and record.get("context"):
+        title = f"{title} | {record['activity']} / {record['context']}"
+
+    for ax in axes[:4]:
+        add_gt_backgrounds(ax, gt_events)
+
+    axes[0].plot(
+        audio_time,
+        robust_scaled(record["pulm_bp"], center=False),
+        color="tab:blue",
+        linewidth=0.55,
+    )
+    axes[0].set_ylabel("Pulm mic")
+    axes[0].set_title(title)
+    axes[0].set_ylim(-1.05, 1.05)
+
+    axes[1].plot(
+        audio_time,
+        robust_scaled(record["amb_bp"], center=False),
+        color="tab:cyan",
+        linewidth=0.55,
+    )
+    axes[1].set_ylabel("Amb mic")
+    axes[1].set_ylim(-1.05, 1.05)
+
+    axes[2].plot(
+        motion_time,
+        robust_scaled(record["stretch_lp"]),
+        color="tab:green",
+        linewidth=0.9,
+    )
+    axes[2].set_ylabel("Stretch")
+    axes[2].set_ylim(-1.05, 1.05)
+
+    axes[3].plot(
+        motion_time,
+        robust_scaled(record["accz_lp"]),
+        color="tab:brown",
+        linewidth=0.9,
+    )
+    axes[3].set_ylabel("Acc Z")
+    axes[3].set_ylim(-1.05, 1.05)
+
+    plot_event_bars(axes[4], gt_events, color="tab:red", label="GT", alpha=0.72)
+    axes[4].set_title("Ground Truth Events", loc="left", fontsize=10, pad=2)
+
+    axes[5].plot(centers, probs, color="tab:blue", linewidth=1.2, marker="o", markersize=2)
+    axes[5].fill_between(
+        centers,
+        threshold,
+        probs,
+        where=probs >= threshold,
+        color="tab:orange",
+        alpha=0.16,
+        interpolate=True,
+    )
+    axes[5].step(centers, preds, where="mid", color="tab:orange", alpha=0.45, linewidth=1.1)
+    axes[5].axhline(threshold, color="black", linestyle="--", linewidth=0.9)
+    axes[5].set_ylabel("P(cough)")
+    axes[5].set_xlabel("Time (s)")
+    axes[5].set_ylim(-0.05, 1.05)
 
     for ax in axes:
-        ax.grid(True, linestyle="--", alpha=0.3)
+        ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.25)
+        ax.set_xlim(0, max(audio_time[-1], centers[-1] if len(centers) else 0))
     fig.tight_layout()
     fig.savefig(output_path, dpi=200, bbox_inches="tight")
     plt.close(fig)
@@ -265,8 +348,8 @@ def main() -> int:
         record_data["record"],
         record_data["spans"],
         probs_np,
-        pred_events,
         gt_events,
+        args.threshold,
         timeline_png,
     )
 

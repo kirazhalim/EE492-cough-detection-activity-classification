@@ -156,30 +156,6 @@ def default_date_from_name(path: Path) -> str:
     return datetime.now().strftime("%Y%m%d")
 
 
-def choose_csv_files_tk(initial_dir: Path) -> list[Path] | None:
-    try:
-        import tkinter as tk
-        from tkinter import filedialog
-    except Exception as exc:
-        print(f"Could not import tkinter for file selection: {exc}")
-        return None
-
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes("-topmost", True)
-    try:
-        selected = filedialog.askopenfilenames(
-            parent=root,
-            title="Select raw CSV file(s)",
-            initialdir=str(initial_dir),
-            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
-        )
-    finally:
-        root.destroy()
-
-    return [Path(path).expanduser().resolve() for path in selected]
-
-
 def choose_csv_files_macos(initial_dir: Path) -> list[Path]:
     escaped_dir = str(initial_dir).replace('"', '\\"')
     script = f'''
@@ -219,14 +195,10 @@ def choose_csv_files() -> list[Path]:
     downloads = Path.home() / "Downloads"
     initial_dir = downloads if downloads.exists() else Path.home()
 
-    selected = choose_csv_files_tk(initial_dir)
-    if selected is not None:
-        return selected
-
     if sys.platform == "darwin":
-        print("Trying macOS Finder file selection instead.")
         return choose_csv_files_macos(initial_dir)
 
+    print("File explorer selection is only implemented for macOS. Pass CSV paths directly.")
     return []
 
 
@@ -274,6 +246,16 @@ def normalize(values: np.ndarray) -> np.ndarray:
     return centered / denom if denom else centered
 
 
+def robust_scaled(values: np.ndarray, center: bool = True) -> np.ndarray:
+    values = np.asarray(values, dtype=np.float32)
+    if center:
+        values = values - float(np.median(values))
+    scale = float(np.percentile(np.abs(values), 99))
+    if scale <= 1.0e-12:
+        scale = float(np.max(np.abs(values))) or 1.0
+    return np.clip(values / scale, -1.0, 1.0)
+
+
 def minmax_downsample(t: np.ndarray, y: np.ndarray, max_points: int = 120_000):
     t = np.asarray(t, dtype=np.float64)
     y = np.asarray(y)
@@ -308,6 +290,42 @@ def butter_lowpass(values: np.ndarray, cutoff: float, fs: int) -> np.ndarray:
     return signal.filtfilt(b, a, values)
 
 
+def label_events(labels: np.ndarray) -> list[tuple[float, float]]:
+    labels = np.asarray(labels).astype(bool)
+    events = []
+    start_idx = None
+    for idx, active in enumerate(labels):
+        if active and start_idx is None:
+            start_idx = idx
+        elif not active and start_idx is not None:
+            events.append((start_idx / FS_AUDIO, idx / FS_AUDIO))
+            start_idx = None
+    if start_idx is not None:
+        events.append((start_idx / FS_AUDIO, len(labels) / FS_AUDIO))
+    return events
+
+
+def add_gt_backgrounds(ax, events: list[tuple[float, float]]) -> None:
+    for start, end in events:
+        ax.axvspan(start, end, color="tab:red", alpha=0.10, linewidth=0)
+
+
+def plot_event_bars(ax, events: list[tuple[float, float]]) -> None:
+    for start, end in events:
+        ax.broken_barh(
+            [(start, max(0.0, end - start))],
+            (0.2, 0.6),
+            facecolors="tab:red",
+            alpha=0.72,
+            edgecolors="tab:red",
+            linewidth=1.4,
+        )
+    ax.set_ylim(0, 1)
+    ax.set_yticks([0.5])
+    ax.set_yticklabels(["GT"])
+    ax.set_ylabel("GT")
+
+
 def build_preview(df: pd.DataFrame, title: str, pyplot):
     pulmonary = df["pulmonary"].to_numpy(dtype=np.float64)
     ambient = df["ambient"].to_numpy(dtype=np.float64)
@@ -327,47 +345,41 @@ def build_preview(df: pd.DataFrame, title: str, pyplot):
     duration = len(pulmonary) / FS_AUDIO
     t_audio = np.linspace(0, duration, len(pulmonary), endpoint=False)
     t_motion = np.linspace(0, duration, len(stretch_f), endpoint=False)
+    events = label_events(label)
 
-    fig, axes = pyplot.subplots(5, 1, figsize=(14, 10), dpi=130, sharex=True)
-    fig.suptitle(f"Raw CSV Preview: {title}", fontsize=12)
-
-    plot_specs = [
-        (axes[0], t_audio, pulmonary, pulmonary_f, "Pulmonary mic", "tab:blue"),
-        (axes[1], t_audio, ambient, ambient_f, "Ambient mic", "tab:red"),
-        (axes[2], t_audio, stretch, stretch_f, "Stretch sensor", "tab:purple"),
-        (axes[3], t_audio, accel_z, accel_f, "Accelerometer Z", "tab:green"),
-    ]
-
-    for ax, raw_t, raw_y, filtered_y, label_text, color in plot_specs:
-        tx, raw_plot = minmax_downsample(raw_t, normalize(raw_y))
-        if len(filtered_y) == len(raw_y):
-            tf = raw_t
-        else:
-            tf = t_motion
-        tf, filtered_plot = minmax_downsample(tf, normalize(filtered_y))
-        ax.plot(tx, raw_plot, color="0.72", linewidth=0.75, label="raw")
-        ax.plot(tf, filtered_plot, color=color, linewidth=1.0, label="filtered")
-        ax.set_title(label_text, fontsize=10)
-        ax.set_ylim(-1.1, 1.1)
-        ax.set_yticks([-1, 0, 1])
-        ax.grid(True, linestyle="--", alpha=0.35)
-        ax.legend(loc="upper right", fontsize=8)
-
-    tx, label_plot = minmax_downsample(t_audio, label)
-    axes[4].fill_between(
-        tx,
-        0,
-        label_plot,
-        step="pre",
-        color="0.75",
-        edgecolor="0.35",
-        linewidth=0.5,
+    fig, axes = pyplot.subplots(
+        5,
+        1,
+        figsize=(18, 8.5),
+        dpi=130,
+        sharex=True,
+        gridspec_kw={"height_ratios": [1.2, 1.2, 1.0, 1.0, 0.65]},
     )
-    axes[4].set_title("Ground truth cough label", fontsize=10)
-    axes[4].set_ylim(0, 1.1)
-    axes[4].set_yticks([0, 1])
+
+    for ax in axes[:4]:
+        add_gt_backgrounds(ax, events)
+
+    sensor_specs = [
+        (axes[0], t_audio, robust_scaled(pulmonary_f, center=False), "Pulm mic", "tab:blue", 0.55),
+        (axes[1], t_audio, robust_scaled(ambient_f, center=False), "Amb mic", "tab:cyan", 0.55),
+        (axes[2], t_motion, robust_scaled(stretch_f), "Stretch", "tab:green", 0.9),
+        (axes[3], t_motion, robust_scaled(accel_f), "Acc Z", "tab:brown", 0.9),
+    ]
+    for idx, (ax, t, values, ylabel, color, linewidth) in enumerate(sensor_specs):
+        tx, y = minmax_downsample(t, values)
+        ax.plot(tx, y, color=color, linewidth=linewidth)
+        ax.set_ylabel(ylabel)
+        ax.set_ylim(-1.05, 1.05)
+        if idx == 0:
+            ax.set_title(f"Raw CSV Preview | {title}")
+
+    plot_event_bars(axes[4], events)
+    axes[4].set_title("Ground Truth Events", loc="left", fontsize=10, pad=2)
     axes[4].set_xlabel("Time (s)")
-    axes[4].grid(True, linestyle="--", alpha=0.35)
+
+    for ax in axes:
+        ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.25)
+        ax.set_xlim(0, duration)
 
     fig.tight_layout()
     return fig
