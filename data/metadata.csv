@@ -87,3 +87,11 @@ record_id,filename,date,subject,activity,context,clothing,relative_path
 85,085_20260507_yakup_sitting_noise.csv,2026-05-07,yakup,sitting,noise,underclothes,curated_csv/085_20260507_yakup_sitting_noise.csv
 86,086_20260507_yakup_sitting_noise.csv,2026-05-07,yakup,sitting,noise,underclothes,curated_csv/086_20260507_yakup_sitting_noise.csv
 87,087_20260507_yakup_standing_noise.csv,2026-05-07,yakup,standing,noise,underclothes,curated_csv/087_20260507_yakup_standing_noise.csv
+88,088_20260510_alperen_walking_noise.csv,2026-05-10,alperen,walking,noise,underclothes,curated_csv/088_20260510_alperen_walking_noise.csv
+89,089_20260510_halim_walking_noise.csv,2026-05-10,halim,walking,noise,underclothes,curated_csv/089_20260510_halim_walking_noise.csv
+90,090_20260510_halim_walking_noise.csv,2026-05-10,halim,walking,noise,underclothes,curated_csv/090_20260510_halim_walking_noise.csv
+91,091_20260510_halim_walking_noise.csv,2026-05-10,halim,walking,noise,underclothes,curated_csv/091_20260510_halim_walking_noise.csv
+92,092_20260510_halim_walking_noise.csv,2026-05-10,halim,walking,noise,underclothes,curated_csv/092_20260510_halim_walking_noise.csv
+93,093_20260510_alperen_sitting_noise.csv,2026-05-10,alperen,sitting,noise,underclothes,curated_csv/093_20260510_alperen_sitting_noise.csv
+94,094_20260510_alperen_walking_noise.csv,2026-05-10,alperen,walking,noise,underclothes,curated_csv/094_20260510_alperen_walking_noise.csv
+95,095_20260510_alperen_walking_noise.csv,2026-05-10,alperen,walking,noise,underclothes,curated_csv/095_20260510_alperen_walking_noise.csv
