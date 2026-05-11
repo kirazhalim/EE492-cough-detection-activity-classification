@@ -72,10 +72,10 @@ Event-level results:
 
 Source files:
 
-- `artifacts/evaluations/v3/test_classification_report.json`
-- `artifacts/evaluations/v3/test_event_metrics.json`
-- `artifacts/evaluations/v3/test_confusion_matrix.png`
-- `artifacts/evaluations/v3/test_predictions.csv`
+- `artifacts/evaluations/v3_cough_pt/original_split_085_records/baseline_full_eval/test_classification_report.json`
+- `artifacts/evaluations/v3_cough_pt/original_split_085_records/baseline_full_eval/test_event_metrics.json`
+- `artifacts/evaluations/v3_cough_pt/original_split_085_records/baseline_full_eval/test_confusion_matrix.png`
+- `artifacts/evaluations/v3_cough_pt/original_split_085_records/baseline_full_eval/test_predictions.csv`
 
 Reproduction command:
 

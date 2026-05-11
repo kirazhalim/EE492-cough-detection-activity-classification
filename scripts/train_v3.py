@@ -27,6 +27,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", default="auto")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--max-records", type=int, default=None)
+    parser.add_argument("--dataset-manifest", default=None)
+    parser.add_argument("--model-id", default=None)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--mlflow", action="store_true")
     parser.add_argument("--mlflow-experiment", default="v3_training")
@@ -43,6 +45,21 @@ def set_seed(seed: int) -> None:
 def config_path(path: str) -> Path:
     p = Path(path)
     return p if p.is_absolute() else project_path(path)
+
+
+def manifest_mlflow_params(path: str | None) -> dict:
+    if not path:
+        return {}
+    manifest = load_config(path)
+    hashes = manifest.get("hashes", {})
+    return {
+        "dataset_manifest": path,
+        "dataset_id": manifest.get("dataset_id", ""),
+        "dataset_record_count": manifest.get("record_count", ""),
+        "dataset_hash": hashes.get("combined_sha256", ""),
+        "dataset_metadata_hash": hashes.get("metadata_rows_sha256", ""),
+        "dataset_files_hash": hashes.get("data_files_sha256", ""),
+    }
 
 
 def evaluate_loader(
@@ -183,11 +200,11 @@ def main() -> int:
     mlflow = None
     if args.mlflow:
         mlflow = setup_mlflow(args)
-        mlflow.log_params(
-            {
+        params = {
                 "script": "train_v3",
                 "config": args.config,
                 "output": args.output,
+                "model_id": args.model_id or "",
                 "seed": args.seed,
                 "device": str(device),
                 "max_records": args.max_records or "",
@@ -213,8 +230,9 @@ def main() -> int:
                 "mel_hop_length": int(spec_cfg["hop_length"]),
                 "f_min": float(spec_cfg["f_min"]),
                 "f_max": float(spec_cfg["f_max"]),
-            }
-        )
+        }
+        params.update(manifest_mlflow_params(args.dataset_manifest))
+        mlflow.log_params(params)
 
     best_val_loss = float("inf")
     best_state = None

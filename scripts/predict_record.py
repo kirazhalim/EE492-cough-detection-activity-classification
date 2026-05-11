@@ -41,6 +41,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--threshold", type=float, default=0.5)
     parser.add_argument("--event-iou-threshold", type=float, default=0.2)
     parser.add_argument("--event-merge-gap-sec", type=float, default=0.0)
+    parser.add_argument("--gt-min-duration-sec", type=float, default=0.0)
+    parser.add_argument("--gt-merge-gap-sec", type=float, default=0.0)
+    parser.add_argument("--pred-min-duration-sec", type=float, default=0.0)
+    parser.add_argument("--pred-merge-gap-sec", type=float, default=None)
+    parser.add_argument(
+        "--pred-span-mode",
+        choices=["full", "center", "hop"],
+        default="full",
+    )
+    parser.add_argument("--pred-center-fraction", type=float, default=None)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--device", default="auto")
     parser.add_argument("--output-dir", default="artifacts/predictions")
@@ -54,6 +64,14 @@ def project_or_absolute(path: str) -> Path:
 
 def load_checkpoint(path: str, device: torch.device) -> dict:
     return torch.load(project_or_absolute(path), map_location=device)
+
+
+def effective_pred_merge_gap(args: argparse.Namespace) -> float:
+    return (
+        args.event_merge_gap_sec
+        if args.pred_merge_gap_sec is None
+        else args.pred_merge_gap_sec
+    )
 
 
 def preprocess_external_record(record_path: Path) -> dict:
@@ -139,6 +157,7 @@ def save_timeline(
     spans: list[tuple[float, float]],
     probs: np.ndarray,
     gt_events,
+    pred_events,
     threshold: float,
     output_path: Path,
 ) -> None:
@@ -150,12 +169,12 @@ def save_timeline(
     preds = (probs >= threshold).astype(float)
 
     fig, axes = plt.subplots(
-        6,
+        7,
         1,
-        figsize=(18, 10),
+        figsize=(18, 11),
         sharex=True,
         gridspec_kw={
-            "height_ratios": [1.2, 1.2, 1.0, 1.0, 0.65, 1.25],
+            "height_ratios": [1.2, 1.2, 1.0, 1.0, 0.65, 0.65, 1.25],
         },
     )
 
@@ -208,8 +227,11 @@ def save_timeline(
     plot_event_bars(axes[4], gt_events, color="tab:red", label="GT", alpha=0.72)
     axes[4].set_title("Ground Truth Events", loc="left", fontsize=10, pad=2)
 
-    axes[5].plot(centers, probs, color="tab:blue", linewidth=1.2, marker="o", markersize=2)
-    axes[5].fill_between(
+    plot_event_bars(axes[5], pred_events, color="tab:orange", label="Pred", alpha=0.70)
+    axes[5].set_title("Predicted Events", loc="left", fontsize=10, pad=2)
+
+    axes[6].plot(centers, probs, color="tab:blue", linewidth=1.2, marker="o", markersize=2)
+    axes[6].fill_between(
         centers,
         threshold,
         probs,
@@ -218,11 +240,11 @@ def save_timeline(
         alpha=0.16,
         interpolate=True,
     )
-    axes[5].step(centers, preds, where="mid", color="tab:orange", alpha=0.45, linewidth=1.1)
-    axes[5].axhline(threshold, color="black", linestyle="--", linewidth=0.9)
-    axes[5].set_ylabel("P(cough)")
-    axes[5].set_xlabel("Time (s)")
-    axes[5].set_ylim(-0.05, 1.05)
+    axes[6].step(centers, preds, where="mid", color="tab:orange", alpha=0.45, linewidth=1.1)
+    axes[6].axhline(threshold, color="black", linestyle="--", linewidth=0.9)
+    axes[6].set_ylabel("P(cough)")
+    axes[6].set_xlabel("Time (s)")
+    axes[6].set_ylim(-0.05, 1.05)
 
     for ax in axes:
         ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.25)
@@ -235,12 +257,18 @@ def save_timeline(
 def main() -> int:
     args = parse_args()
     device = resolve_device(args.device)
+    pred_merge_gap_sec = effective_pred_merge_gap(args)
     checkpoint = load_checkpoint(args.checkpoint, device=device)
     cfg = checkpoint["config"]
 
     metadata = load_metadata(project_or_absolute(args.metadata))
     window_cfg = cfg["windowing"]
     spec_cfg = cfg["spectrogram"]
+    pred_center_fraction = (
+        float(window_cfg["center_fraction"])
+        if args.pred_center_fraction is None
+        else args.pred_center_fraction
+    )
 
     if args.record_id is not None:
         record_data = build_record_dataset(
@@ -301,11 +329,16 @@ def main() -> int:
     gt_events = binary_labels_to_events(
         record_data["record"]["cough_label"],
         sample_rate=int(record_data["record"]["fs_audio"]),
+        min_duration_sec=args.gt_min_duration_sec,
+        merge_gap_sec=args.gt_merge_gap_sec,
     )
     pred_events = window_predictions_to_events(
         record_data["spans"],
         preds_np,
-        merge_gap_sec=args.event_merge_gap_sec,
+        min_duration_sec=args.pred_min_duration_sec,
+        merge_gap_sec=pred_merge_gap_sec,
+        span_mode=args.pred_span_mode,
+        center_fraction=pred_center_fraction,
     )
     metrics = event_level_metrics(
         gt_events,
@@ -336,6 +369,14 @@ def main() -> int:
             {
                 "record": record_data["record"]["filename"],
                 "threshold": args.threshold,
+                "event_iou_threshold": args.event_iou_threshold,
+                "event_merge_gap_sec": args.event_merge_gap_sec,
+                "gt_min_duration_sec": args.gt_min_duration_sec,
+                "gt_merge_gap_sec": args.gt_merge_gap_sec,
+                "pred_min_duration_sec": args.pred_min_duration_sec,
+                "pred_merge_gap_sec": pred_merge_gap_sec,
+                "pred_span_mode": args.pred_span_mode,
+                "pred_center_fraction": pred_center_fraction,
                 "event_metrics": metrics,
                 "predicted_events": [event.__dict__ for event in pred_events],
                 "ground_truth_events": [event.__dict__ for event in gt_events],
@@ -349,6 +390,7 @@ def main() -> int:
         record_data["spans"],
         probs_np,
         gt_events,
+        pred_events,
         args.threshold,
         timeline_png,
     )

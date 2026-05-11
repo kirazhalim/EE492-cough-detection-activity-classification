@@ -43,6 +43,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config", default="configs/v3.yaml")
     parser.add_argument("--split", choices=["val", "test"], default="test")
     parser.add_argument("--batch-size", type=int, default=None)
+    parser.add_argument("--dataset-manifest", default=None)
+    parser.add_argument("--model-id", default=None)
     parser.add_argument("--threshold", type=float, default=0.5)
     parser.add_argument("--event-iou-threshold", type=float, default=0.2)
     parser.add_argument("--event-merge-gap-sec", type=float, default=0.0)
@@ -57,7 +59,15 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--pred-center-fraction", type=float, default=None)
     parser.add_argument("--device", default="auto")
-    parser.add_argument("--output-dir", default="artifacts/evaluations/v3")
+    parser.add_argument(
+        "--output-dir",
+        default=None,
+        help=(
+            "Evaluation output directory. If omitted, a descriptive path is "
+            "created under artifacts/evaluations based on the checkpoint, "
+            "record count, split, threshold, and event settings."
+        ),
+    )
     parser.add_argument("--mlflow", action="store_true")
     parser.add_argument("--mlflow-experiment", default="v3_evaluation")
     parser.add_argument("--mlflow-run-name", default=None)
@@ -72,6 +82,21 @@ def project_or_absolute(path: str) -> Path:
 
 def load_checkpoint(path: str, device: torch.device) -> dict:
     return torch.load(project_or_absolute(path), map_location=device)
+
+
+def manifest_mlflow_params(path: str | None) -> dict:
+    if not path:
+        return {}
+    manifest = load_config(path)
+    hashes = manifest.get("hashes", {})
+    return {
+        "dataset_manifest": path,
+        "dataset_id": manifest.get("dataset_id", ""),
+        "dataset_record_count": manifest.get("record_count", ""),
+        "dataset_hash": hashes.get("combined_sha256", ""),
+        "dataset_metadata_hash": hashes.get("metadata_rows_sha256", ""),
+        "dataset_files_hash": hashes.get("data_files_sha256", ""),
+    }
 
 
 def save_confusion_matrix(cm: np.ndarray, output_path: Path) -> None:
@@ -134,6 +159,54 @@ def effective_pred_merge_gap(args: argparse.Namespace) -> float:
     )
 
 
+def token_float(value: float) -> str:
+    return f"{float(value):.2f}".replace(".", "p").replace("-", "m")
+
+
+def checkpoint_label(checkpoint_path: str) -> str:
+    return Path(checkpoint_path).name.replace(".", "_")
+
+
+def event_settings_label(
+    args: argparse.Namespace,
+    pred_merge_gap_sec: float,
+) -> str:
+    uses_default_event_processing = (
+        args.gt_min_duration_sec == 0.0
+        and args.gt_merge_gap_sec == 0.0
+        and args.pred_min_duration_sec == 0.0
+        and pred_merge_gap_sec == 0.0
+        and args.pred_center_fraction is None
+    )
+    if args.pred_span_mode == "full" and uses_default_event_processing:
+        label = "baseline_full_eval"
+    elif args.pred_span_mode == "full":
+        label = "postprocessed_eval"
+    else:
+        label = f"{args.pred_span_mode}_eval"
+
+    # Keep common V3 threshold folders readable. Non-standard thresholds are
+    # still made visible to avoid accidental overwrites during experiments.
+    if abs(float(args.threshold) - 0.6) > 1.0e-12:
+        label = f"{label}_t{token_float(args.threshold)}"
+    return label
+
+
+def default_output_dir(
+    args: argparse.Namespace,
+    record_ids,
+    pred_merge_gap_sec: float,
+) -> Path:
+    dataset_label = f"{args.split}_split_{len(record_ids):03d}_records"
+    return project_path(
+        Path("artifacts")
+        / "evaluations"
+        / checkpoint_label(args.checkpoint)
+        / dataset_label
+        / event_settings_label(args, pred_merge_gap_sec)
+    )
+
+
 def log_to_mlflow(
     args: argparse.Namespace,
     cfg: dict,
@@ -163,6 +236,7 @@ def log_to_mlflow(
                 "script": "evaluate_v3",
                 "checkpoint": args.checkpoint,
                 "config": args.config,
+                "model_id": args.model_id or "",
                 "split": args.split,
                 "threshold": args.threshold,
                 "event_iou_threshold": args.event_iou_threshold,
@@ -186,6 +260,7 @@ def log_to_mlflow(
                 "n_mels": int(cfg["spectrogram"]["n_mels"]),
                 "n_fft": int(cfg["spectrogram"]["n_fft"]),
                 "mel_hop_length": int(cfg["spectrogram"]["hop_length"]),
+                **manifest_mlflow_params(args.dataset_manifest),
             }
         )
         mlflow.log_metrics(
@@ -267,7 +342,11 @@ def main() -> int:
     )
     cm = confusion_matrix(labels_np, preds_np, labels=[0, 1])
 
-    output_dir = project_or_absolute(args.output_dir)
+    output_dir = (
+        project_or_absolute(args.output_dir)
+        if args.output_dir
+        else default_output_dir(args, record_ids, pred_merge_gap_sec)
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
     report_path = output_dir / f"{args.split}_classification_report.json"
     cm_path = output_dir / f"{args.split}_confusion_matrix.png"

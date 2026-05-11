@@ -10,6 +10,8 @@ __pycache__/
 **/*.pyc
 *.egg-info/
 models/
+!configs/models/
+!configs/models/*.yaml
 
 # Jupyter
 .ipynb_checkpoints/
